@@ -62,6 +62,14 @@ function rejectNonPostMethod(): Response {
   })
 }
 
+async function readTorrentStateFormData(request: Request): Promise<FormData> {
+  try {
+    return await request.formData()
+  } catch {
+    return new FormData()
+  }
+}
+
 export async function handleTorrentStateAction(
   request: Request,
   state: "pause" | "resume"
@@ -70,8 +78,9 @@ export async function handleTorrentStateAction(
     return rejectNonPostMethod()
   }
 
-  logger.debug("URL", request.url)
-  const formData = await request.formData()
+  const url = new URL(request.url)
+  logger.debug("Path", url.pathname)
+  const formData = await readTorrentStateFormData(request)
   const parsed = parseTorrentHashesFromFormData(formData)
   const hashes = await resolveTorrentHashes(parsed)
 
