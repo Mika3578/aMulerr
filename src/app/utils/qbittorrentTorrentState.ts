@@ -18,7 +18,7 @@ export function normalizeQbittorrentHash(raw: string): string {
 export function parseTorrentHashesFromFormData(
   formData: FormData
 ): ParsedTorrentHashes {
-  const hashesRaw = formData.get("hashes")?.toString()
+  const hashesRaw = formData.get("hashes")?.toString().trim()
   if (!hashesRaw) {
     return { kind: "none" }
   }
@@ -55,10 +55,21 @@ export async function resolveTorrentHashes(
   return parsed.hashes
 }
 
+function rejectNonPostMethod(): Response {
+  return new Response(null, {
+    status: 405,
+    headers: { Allow: "POST" },
+  })
+}
+
 export async function handleTorrentStateAction(
   request: Request,
   state: "pause" | "resume"
 ): Promise<Response> {
+  if (request.method !== "POST") {
+    return rejectNonPostMethod()
+  }
+
   logger.debug("URL", request.url)
   const formData = await request.formData()
   const parsed = parseTorrentHashesFromFormData(formData)
@@ -76,5 +87,5 @@ export async function handleTorrentStateAction(
 }
 
 export function rejectTorrentStateGet(): Response {
-  return new Response(null, { status: 405 })
+  return rejectNonPostMethod()
 }
