@@ -4,7 +4,9 @@ import {
   amuleGetShared,
   amuleDoDownload,
   amuleDoDelete,
+  amuleDoPause,
   amuleDoReloadShared,
+  amuleDoResume,
 } from "amule/amule"
 import { toEd2kLink } from "~/links"
 import { unlink } from "node:fs/promises"
@@ -12,8 +14,50 @@ import { createJsonDb } from "~/utils/jsonDb"
 import { staleWhileRevalidate } from "~/utils/memoize"
 
 export const metadataDb = createJsonDb<
-  Record<string, { category: string; addedOn: number }>
+  Record<
+    string,
+    { category: string; addedOn: number; pausedByApi?: boolean }
+  >
 >("/config/hash-metadata.json", {})
+
+function setPausedByApi(hash: string, paused: boolean) {
+  const existing = metadataDb.data[hash]
+
+  if (paused) {
+    metadataDb.data[hash] = {
+      category: existing?.category ?? "",
+      addedOn: existing?.addedOn ?? Date.now(),
+      pausedByApi: true,
+    }
+    return
+  }
+
+  if (!existing) {
+    return
+  }
+
+  const next = { ...existing }
+  delete next.pausedByApi
+  metadataDb.data[hash] = next
+}
+
+export async function pauseTorrents(hashes: string[]) {
+  await Promise.all(
+    hashes.map(async (hash) => {
+      await amuleDoPause(hash)
+      setPausedByApi(hash, true)
+    })
+  )
+}
+
+export async function resumeTorrents(hashes: string[]) {
+  await Promise.all(
+    hashes.map(async (hash) => {
+      await amuleDoResume(hash)
+      setPausedByApi(hash, false)
+    })
+  )
+}
 
 export const getDownloadClientFiles = staleWhileRevalidate(async function () {
   const uploads = await amuleGetUploads()
@@ -76,8 +120,10 @@ export async function download(
 }
 
 export function setCategory(hash: string, category: string) {
+  const existing = metadataDb.data[hash]
   metadataDb.data[hash] = {
-    addedOn: Date.now(),
+    ...existing,
+    addedOn: existing?.addedOn ?? Date.now(),
     category: category,
   }
 }

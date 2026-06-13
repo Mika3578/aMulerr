@@ -1,8 +1,10 @@
 import { amuleDoResume, amuleGetDownloads } from "amule/amule"
+import { metadataDb } from "~/data/downloadClient"
 import { Mutex } from "async-mutex"
 import { logger } from "~/utils/logger"
 
 declare global {
+    // eslint-disable-next-line no-var -- TypeScript global augmentation requires var
     var resumePausedDownloadsMutex: Mutex
 }
 
@@ -15,7 +17,10 @@ export async function resumePausedDownloads() {
 
     await globalThis.resumePausedDownloadsMutex.runExclusive(async () => {
         const downloads = await amuleGetDownloads()
-        const stoppedDownloads = downloads.filter(d => d.status_str === 'stopped')
+        const stoppedDownloads = downloads.filter(
+          (d) =>
+            d.status_str === "stopped" && !metadataDb.data[d.hash]?.pausedByApi
+        )
         if (!stoppedDownloads.length) {
             return
         }

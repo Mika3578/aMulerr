@@ -182,6 +182,14 @@ export async function amuleDoResume(hash: string) {
   return await fetchAmuleApi(url)
 }
 
+export async function amuleDoPause(hash: string) {
+  const url = new URL(`${host}/api.php`)
+  url.searchParams.set("do", "pause")
+  url.searchParams.set("hash", hash)
+
+  return await fetchAmuleApi(url)
+}
+
 export async function amuleDoReloadShared() {
   const url = new URL(`${host}/api.php`)
   url.searchParams.set("do", "reload-shared")
@@ -314,6 +322,8 @@ export const amuleGetDownloads = staleWhileRevalidate(async function () {
           }
         })(),
       }
+      // category is omitted from the download payload returned to callers
+      // eslint-disable-next-line @typescript-eslint/no-unused-vars
       const { category, ...good } = o
       return good
     })
