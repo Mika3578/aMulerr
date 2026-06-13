@@ -18,7 +18,13 @@ export function normalizeQbittorrentHash(raw: string): string {
 export function parseTorrentHashesFromFormData(
   formData: FormData
 ): ParsedTorrentHashes {
-  const hashesRaw = formData.get("hashes")?.toString().trim()
+  const hashesValue = formData.get("hashes")
+
+  if (typeof hashesValue !== "string") {
+    return { kind: "none" }
+  }
+
+  const hashesRaw = hashesValue.trim()
   if (!hashesRaw) {
     return { kind: "none" }
   }
