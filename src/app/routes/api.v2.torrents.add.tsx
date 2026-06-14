@@ -1,24 +1,68 @@
 import { ActionFunction, json } from "@remix-run/node"
 import { download } from "~/data/downloadClient"
-import { fromMagnetLink } from "~/links"
+import {
+  MagnetParseError,
+  parseSyntheticMagnetLink,
+} from "~/utils/qbittorrentMagnet"
 import { logger } from "~/utils/logger"
 
+async function readTorrentAddFormData(request: Request): Promise<FormData> {
+  try {
+    return await request.formData()
+  } catch {
+    return new FormData()
+  }
+}
+
 export const action = (async ({ request }) => {
-  logger.debug("URL", request.url)
-  const formData = await request.formData()
-  const urls = formData.get("urls")?.toString()
-  const category = formData.get("category")?.toString()
+  const url = new URL(request.url)
+  logger.debug("Path", url.pathname)
 
-  if (!urls) {
-    throw new Error("No URL to download")
+  const formData = await readTorrentAddFormData(request)
+
+  if (formData.has("torrents") || formData.has("torrents0")) {
+    return new Response(
+      "BitTorrent .torrent file uploads are unsupported; use eMulerr synthetic magnets",
+      {
+        status: 415,
+        headers: { "Content-Type": "text/plain" },
+      }
+    )
   }
 
-  if (!category) {
-    throw new Error("No download category")
+  const urlsRaw = formData.get("urls")?.toString()
+  const category = formData.get("category")?.toString() ?? ""
+  const paused =
+    formData.get("paused")?.toString().trim().toLowerCase() === "true" ||
+    formData.get("stopped")?.toString().trim().toLowerCase() === "true"
+
+  if (!urlsRaw?.trim()) {
+    return new Response("Missing urls parameter", { status: 400 })
   }
 
-  const { hash, name, size } = fromMagnetLink(urls)
-  await download(hash, name, size, category)
+  const magnets = urlsRaw
+    .split("\n")
+    .map((entry) => entry.trim())
+    .filter(Boolean)
+
+  const parsedMagnets = []
+  for (const magnet of magnets) {
+    try {
+      parsedMagnets.push(parseSyntheticMagnetLink(magnet))
+    } catch (error) {
+      const message =
+        error instanceof MagnetParseError
+          ? error.message
+          : "Invalid magnet link"
+      return new Response(message, { status: 400 })
+    }
+  }
+
+  for (const magnet of parsedMagnets) {
+    await download(magnet.hash, magnet.name, magnet.size, category, {
+      paused,
+    })
+  }
 
   return json({})
 }) satisfies ActionFunction

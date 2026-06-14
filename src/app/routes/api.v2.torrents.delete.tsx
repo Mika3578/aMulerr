@@ -1,20 +1,23 @@
 import { ActionFunction, json } from "@remix-run/node"
-import { remove } from "~/data/downloadClient"
-import { skipFalsy } from "~/utils/array"
+import {
+  removeTorrents,
+  selectionFromParsedHashes,
+} from "~/data/downloadClient"
+import { parseTorrentHashesFromFormData } from "~/utils/qbittorrentHash"
+import { parseQbittorrentBoolean } from "~/utils/qbittorrentBoolean"
 import { logger } from "~/utils/logger"
 
 export const action = (async ({ request }) => {
-  logger.debug("URL", request.url)
-  const formData = await request.formData()
-  const hashes = formData
-    .get("hashes")
-    ?.toString()
-    ?.toUpperCase()
-    ?.split("|")
-    .filter(skipFalsy)
+  const url = new URL(request.url)
+  logger.debug("Path", url.pathname)
 
-  if (hashes?.length) {
-    await remove(hashes)
+  const formData = await request.formData()
+  const parsed = parseTorrentHashesFromFormData(formData)
+  const selection = selectionFromParsedHashes(parsed)
+  const deleteFiles = parseQbittorrentBoolean(formData.get("deleteFiles"))
+
+  if (selection) {
+    await removeTorrents(selection, deleteFiles)
   }
 
   return json({})

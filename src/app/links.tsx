@@ -1,4 +1,8 @@
 import base32 from "hi-base32"
+import {
+  MagnetParseError,
+  parseSyntheticMagnetLink,
+} from "~/utils/qbittorrentMagnet"
 
 export function toMagnetLink(hash: string, name: string, size: number) {
   const hashBuffer = Buffer.from(hash, "hex")
@@ -10,23 +14,15 @@ export function toMagnetLink(hash: string, name: string, size: number) {
 }
 
 export function fromMagnetLink(magnetLink: string) {
-  const extractMagnetLinkInfo =
-    /magnet:\?xt=urn:btih:(?<hash>.*)&dn=(?<name>.*)&xl=(?<size>[^&]+)&tr=http:\/\/emulerr/
-  const {
-    hash: base32Hash,
-    name,
-    size,
-  } = extractMagnetLinkInfo.exec(magnetLink)?.groups ?? {}
+  try {
+    return parseSyntheticMagnetLink(magnetLink)
+  } catch (error) {
+    if (error instanceof MagnetParseError) {
+      throw new Error(error.message)
+    }
 
-  if (!base32Hash || !name || !size) {
-    throw new Error("Invalid magnet link")
+    throw error
   }
-
-  const hash = Buffer.from(base32.decode.asBytes(base32Hash))
-    .toString("hex")
-    .substring(0, 32)
-    .toUpperCase()
-  return { hash, name: decodeURIComponent(name), size: parseInt(size) }
 }
 
 export function toEd2kLink(hash: string, name: string, size: number) {

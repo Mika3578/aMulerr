@@ -1,26 +1,27 @@
 import { ActionFunction, json } from "@remix-run/node"
-import { setCategory } from "~/data/downloadClient"
-import { skipFalsy } from "~/utils/array"
+import {
+  resolveApiVisibleHashes,
+  selectionFromParsedHashes,
+  setCategoryForKnownHashes,
+} from "~/data/downloadClient"
+import { parseTorrentHashesFromFormData } from "~/utils/qbittorrentHash"
 import { logger } from "~/utils/logger"
 
 export const action = (async ({ request }) => {
-  logger.debug("URL", request.url)
-  const formData = await request.formData()
-  const hashes = formData
-    .get("hashes")
-    ?.toString()
-    ?.toUpperCase()
-    ?.split("|")
-    .filter(skipFalsy)
-  const category = formData.get("category")?.toString()
+  const url = new URL(request.url)
+  logger.debug("Path", url.pathname)
 
-  if (category && hashes?.length) {
-    await Promise.all(
-      hashes.map(async (hash) => {
-        setCategory(hash, category)
-      })
-    )
+  const formData = await request.formData()
+  const parsed = parseTorrentHashesFromFormData(formData)
+  const selection = selectionFromParsedHashes(parsed)
+  const category = formData.get("category")
+
+  if (typeof category !== "string" || !selection) {
+    return json({})
   }
+
+  const knownHashes = await resolveApiVisibleHashes(selection)
+  setCategoryForKnownHashes(knownHashes, category)
 
   return json({})
 }) satisfies ActionFunction

@@ -3,59 +3,21 @@ import {
   resumeTorrents,
   type TorrentHashSelection,
 } from "~/data/downloadClient"
+import {
+  parseTorrentHashesFromFormData,
+  type ParsedQbittorrentHashSelection,
+} from "~/utils/qbittorrentHash"
 import { logger } from "~/utils/logger"
 
-export type ParsedTorrentHashes =
-  | { kind: "none" }
-  | { kind: "all" }
-  | { kind: "hashes"; hashes: string[] }
+export type { ParsedQbittorrentHashSelection as ParsedTorrentHashes }
 
-export function normalizeQbittorrentHash(raw: string): string {
-  const hash = raw.trim().toUpperCase()
-  if (/^[0-9A-F]{40}$/.test(hash) && hash.endsWith("00000000")) {
-    return hash.slice(0, 32)
-  }
-  return hash
-}
-
-export function parseTorrentHashesFromFormData(
-  formData: FormData
-): ParsedTorrentHashes {
-  const hashesValue = formData.get("hashes")
-
-  if (typeof hashesValue !== "string") {
-    return { kind: "none" }
-  }
-
-  const hashesRaw = hashesValue.trim()
-  if (!hashesRaw) {
-    return { kind: "none" }
-  }
-
-  if (hashesRaw.toLowerCase() === "all") {
-    return { kind: "all" }
-  }
-
-  const hashes = [
-    ...new Set(
-      hashesRaw
-        .split("|")
-        .map((part) => part.trim())
-        .filter(Boolean)
-        .map(normalizeQbittorrentHash)
-        .filter((hash) => /^[0-9A-F]{32}$/.test(hash))
-    ),
-  ]
-
-  if (!hashes.length) {
-    return { kind: "none" }
-  }
-
-  return { kind: "hashes", hashes }
-}
+export {
+  parseTorrentHashesFromFormData,
+  parseQbittorrentHashSelection,
+} from "~/utils/qbittorrentHash"
 
 function toTorrentHashSelection(
-  parsed: ParsedTorrentHashes
+  parsed: ParsedQbittorrentHashSelection
 ): TorrentHashSelection | null {
   if (parsed.kind === "none") {
     return null

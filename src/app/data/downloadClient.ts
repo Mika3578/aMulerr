@@ -10,28 +10,59 @@ import {
 } from "amule/amule"
 import { toEd2kLink } from "~/links"
 import { unlink } from "node:fs/promises"
+import { existsSync } from "node:fs"
 import { createJsonDb } from "~/utils/jsonDb"
 import { staleWhileRevalidate } from "~/utils/memoize"
+import {
+  externalToInternalEd2kHash,
+  type ParsedQbittorrentHashSelection,
+} from "~/utils/qbittorrentHash"
+import {
+  COMPLETE_DOWNLOAD_ROOT,
+  INCOMPLETE_DOWNLOAD_ROOT,
+  resolveSafeFilePath,
+  SHARED_DOWNLOAD_ROOT,
+} from "~/utils/qbittorrentPathSafety"
 
-export const metadataDb = createJsonDb<
-  Record<
-    string,
-    { category: string; addedOn: number; pausedByApi?: boolean }
-  >
->("/config/hash-metadata.json", {})
+export type HashMetadata = {
+  category: string
+  addedOn: number
+  pausedByApi?: boolean
+  removedFromApi?: boolean
+  completionOn?: number
+}
+
+export const metadataDb = createJsonDb<Record<string, HashMetadata>>(
+  "/config/hash-metadata.json",
+  {}
+)
+
+export type TorrentHashSelection = "all" | string[]
+
+export type DownloadClientFile = Awaited<
+  ReturnType<typeof getDownloadClientFiles>
+>[number]
+
+function spreadMetadata(
+  hash: string,
+  patch: Partial<HashMetadata>
+): HashMetadata {
+  const existing = metadataDb.data[hash]
+  return {
+    category: existing?.category ?? "",
+    addedOn: existing?.addedOn ?? Date.now(),
+    ...existing,
+    ...patch,
+  }
+}
 
 function setPausedByApi(hash: string, paused: boolean) {
-  const existing = metadataDb.data[hash]
-
   if (paused) {
-    metadataDb.data[hash] = {
-      category: existing?.category ?? "",
-      addedOn: existing?.addedOn ?? Date.now(),
-      pausedByApi: true,
-    }
+    metadataDb.data[hash] = spreadMetadata(hash, { pausedByApi: true })
     return
   }
 
+  const existing = metadataDb.data[hash]
   if (!existing) {
     return
   }
@@ -41,7 +72,34 @@ function setPausedByApi(hash: string, paused: boolean) {
   metadataDb.data[hash] = next
 }
 
-export type TorrentHashSelection = "all" | string[]
+function markRemovedFromApi(hash: string) {
+  metadataDb.data[hash] = spreadMetadata(hash, { removedFromApi: true })
+}
+
+function clearRemovedFromApi(hash: string) {
+  const existing = metadataDb.data[hash]
+  if (!existing?.removedFromApi) {
+    return
+  }
+
+  const next = { ...existing }
+  delete next.removedFromApi
+  metadataDb.data[hash] = next
+}
+
+function persistCompletionOn(hash: string, completed: boolean) {
+  if (!completed || metadataDb.data[hash]?.completionOn !== undefined) {
+    return
+  }
+
+  const existing = metadataDb.data[hash]
+  metadataDb.data[hash] = {
+    category: existing?.category ?? "",
+    addedOn: existing?.addedOn ?? Date.now(),
+    ...existing,
+    completionOn: Date.now(),
+  }
+}
 
 export async function resolveKnownDownloadHashes(
   selection: TorrentHashSelection
@@ -53,15 +111,45 @@ export async function resolveKnownDownloadHashes(
   }
 
   const knownHashes = new Map(
-    downloads.map((download) => [
-      download.hash.toUpperCase(),
-      download.hash,
-    ])
+    downloads.map((download) => [download.hash.toUpperCase(), download.hash])
   )
 
   return [...new Set(selection.map((hash) => hash.toUpperCase()))]
     .map((hash) => knownHashes.get(hash))
     .filter((hash): hash is string => Boolean(hash))
+}
+
+export async function resolveApiVisibleHashes(
+  selection: TorrentHashSelection
+): Promise<string[]> {
+  const files = await getDownloadClientFiles()
+  const visibleHashes = files.map((file) => file.hash)
+
+  if (selection === "all") {
+    return visibleHashes
+  }
+
+  const visible = new Map(
+    visibleHashes.map((hash) => [hash.toUpperCase(), hash])
+  )
+
+  return [...new Set(selection.map((hash) => hash.toUpperCase()))]
+    .map((hash) => visible.get(hash))
+    .filter((hash): hash is string => Boolean(hash))
+}
+
+export function selectionFromParsedHashes(
+  parsed: ParsedQbittorrentHashSelection
+): TorrentHashSelection | null {
+  if (parsed.kind === "none") {
+    return null
+  }
+
+  if (parsed.kind === "all") {
+    return "all"
+  }
+
+  return parsed.hashes
 }
 
 export async function pauseTorrents(selection: TorrentHashSelection) {
@@ -86,13 +174,20 @@ export async function resumeTorrents(selection: TorrentHashSelection) {
   )
 }
 
-export const getDownloadClientFiles = staleWhileRevalidate(async function () {
+let amuleClientFilesGeneration = 0
+const permanentlyRemovedHashes = new Set<string>()
+
+export function invalidateAmuleClientFilesCache() {
+  amuleClientFilesGeneration += 1
+}
+
+const getAmuleClientFilesCached = staleWhileRevalidate(async function (
+  _generation: number
+) {
   const uploads = await amuleGetUploads()
-  const downloads = [...await amuleGetDownloads()]
+  const downloads = [...(await amuleGetDownloads())]
   const shared = (await amuleGetShared())
-    .filter(
-      (f) => !downloads.some((d) => d.hash === f.hash)
-    )
+    .filter((f) => !downloads.some((d) => d.hash === f.hash))
     .map(
       (f) =>
         ({
@@ -113,9 +208,7 @@ export const getDownloadClientFiles = staleWhileRevalidate(async function () {
         }) as const
     )
 
-  const metadata = metadataDb.data
-
-  const files = [
+  return [
     ...downloads.sort(
       (a, b) =>
         (b.speed > 0 ? 1 : 0) - (a.speed > 0 ? 1 : 0) ||
@@ -123,60 +216,151 @@ export const getDownloadClientFiles = staleWhileRevalidate(async function () {
         b.speed - a.speed
     ),
     ...shared,
-  ].map((f) => ({
-    ...f,
+  ].map((file) => ({
+    ...file,
     up_speed: uploads
-      .filter((u) => u.name === f.name)
+      .filter((u) => u.name === file.name)
       .map((u) => u.xfer_speed)
       .reduce((prev, curr) => prev + curr, 0),
-    meta: metadata[f.hash],
   }))
+})
+
+async function getAmuleClientFiles() {
+  return getAmuleClientFilesCached(amuleClientFilesGeneration)
+}
+
+export async function getDownloadClientFiles() {
+  const files = await getAmuleClientFiles()
+
+  for (const hash of [...permanentlyRemovedHashes]) {
+    if (!files.some((file) => file.hash === hash)) {
+      permanentlyRemovedHashes.delete(hash)
+    }
+  }
 
   return files
-})
+    .filter(
+      (file) =>
+        !metadataDb.data[file.hash]?.removedFromApi &&
+        !permanentlyRemovedHashes.has(file.hash)
+    )
+    .map((file) => {
+      persistCompletionOn(file.hash, file.progress >= 1)
+      return {
+        ...file,
+        meta: metadataDb.data[file.hash],
+      }
+    })
+}
+
+export async function getApiVisibleFileByHash(
+  hashInput: string
+): Promise<DownloadClientFile | undefined> {
+  const internalHash = externalToInternalEd2kHash(hashInput)
+  if (!internalHash) {
+    return undefined
+  }
+
+  const files = await getDownloadClientFiles()
+  return files.find((file) => file.hash.toUpperCase() === internalHash)
+}
 
 export async function download(
   hash: string,
   name: string,
   size: number,
-  category: string
+  category: string,
+  options?: { paused?: boolean }
 ) {
   const ed2kLink = toEd2kLink(hash, name, size)
   await amuleDoDownload(ed2kLink)
-  setCategory(hash, category)
+
+  metadataDb.data[hash] = spreadMetadata(hash, { category })
+  clearRemovedFromApi(hash)
+  permanentlyRemovedHashes.delete(hash)
+
+  if (options?.paused) {
+    await amuleDoPause(hash)
+    setPausedByApi(hash, true)
+  }
+
+  invalidateAmuleClientFilesCache()
+}
+
+export function setCategoryForKnownHashes(hashes: string[], category: string) {
+  for (const hash of hashes) {
+    metadataDb.data[hash] = spreadMetadata(hash, { category })
+  }
+}
+
+export async function removeTorrents(
+  selection: TorrentHashSelection,
+  deleteFiles: boolean
+) {
+  const hashes = await resolveApiVisibleHashes(selection)
+  if (!hashes.length) {
+    return
+  }
+
+  const downloads = await amuleGetDownloads()
+  const shared = await amuleGetShared()
+
+  await Promise.all(
+    hashes.map(async (hash) => {
+      const active = downloads.find((entry) => entry.hash === hash)
+      const completed = shared.find((entry) => entry.hash === hash)
+      const file = active ?? completed
+
+      if (!file) {
+        return
+      }
+
+      const isCompleted = !active && Boolean(completed)
+
+      if (!deleteFiles) {
+        if (active) {
+          await amuleDoDelete(hash)
+        }
+        markRemovedFromApi(hash)
+        return
+      }
+
+      await amuleDoDelete(hash)
+
+      if (file.name) {
+        await deleteKnownFile(file.name)
+      }
+
+      delete metadataDb.data[hash]
+      permanentlyRemovedHashes.add(hash)
+    })
+  )
+
+  if (deleteFiles) {
+    await amuleDoReloadShared()
+  }
+
+  invalidateAmuleClientFilesCache()
+}
+
+async function deleteKnownFile(fileName: string) {
+  for (const root of [
+    COMPLETE_DOWNLOAD_ROOT,
+    SHARED_DOWNLOAD_ROOT,
+    INCOMPLETE_DOWNLOAD_ROOT,
+  ]) {
+    const safePath = resolveSafeFilePath(root, fileName)
+    if (safePath && existsSync(safePath)) {
+      await unlink(safePath).catch(() => void 0)
+    }
+  }
+}
+
+// Backward-compatible alias used by existing routes during transition.
+export async function remove(hashes: string[], deleteFiles = true) {
+  await removeTorrents(hashes, deleteFiles)
 }
 
 export function setCategory(hash: string, category: string) {
-  const existing = metadataDb.data[hash]
-  metadataDb.data[hash] = {
-    ...existing,
-    addedOn: existing?.addedOn ?? Date.now(),
-    category: category,
-  }
-}
-
-export async function remove(hashes: string[]) {
-  if (hashes.length) {
-    const downloads = await amuleGetDownloads()
-    const shared = await amuleGetShared()
-
-    await Promise.all(
-      hashes.map(async (hash) => {
-        const file =
-          downloads.find((v) => v.hash === hash) ??
-          shared.find((v) => v.hash === hash)
-
-        await amuleDoDelete(hash)
-
-        if (file) {
-          await unlink(`/downloads/complete/${file.name}`).catch(() => void 0)
-          await unlink(`/tmp/shared/${file.name}`).catch(() => void 0)
-        }
-
-        delete metadataDb.data[hash]
-      })
-    )
-
-    await amuleDoReloadShared()
-  }
+  metadataDb.data[hash] = spreadMetadata(hash, { category })
 }

@@ -1,66 +1,38 @@
 import { LoaderFunction, json } from "@remix-run/node"
-import { amuleGetDownloads } from "amule/amule"
-import { existsSync } from "fs"
 import { getDownloadClientFiles } from "~/data/downloadClient"
+import { buildQbittorrentTorrentInfo } from "~/utils/qbittorrentTorrentResponse"
+import { parseQbittorrentHashSelection } from "~/utils/qbittorrentHash"
 import { logger } from "~/utils/logger"
 
 export const loader = (async ({ request }) => {
-  logger.debug("URL", request.url)
   const url = new URL(request.url)
+  logger.debug("Path", url.pathname)
+
   const category = url.searchParams.get("category")
+  const hashSelection = parseQbittorrentHashSelection(
+    url.searchParams.get("hashes")
+  )
   const files = await getDownloadClientFiles()
 
-  return json([
-    ...files
-      .filter((d) => {
-        return !category || d.meta?.category === category
+  return json(
+    files
+      .filter((file) => {
+        if (category !== null && (file.meta?.category ?? "") !== category) {
+          return false
+        }
+
+        if (hashSelection.kind === "hashes") {
+          const wanted = new Set(
+            hashSelection.hashes.map((hash) => hash.toUpperCase())
+          )
+          return wanted.has(file.hash.toUpperCase())
+        }
+
+        return true
       })
-      .map((f) => ({
-        // qBittorrent structure
-        hash: f.hash,
-        name: f.name,
-        size: f.size,
-        size_done: f.size_done,
-        progress:
-          f.progress === 1 ? 1 : Math.min(0.999, Math.max(f.progress, 0.001)),
-        dlspeed: f.speed,
-        eta: f.eta,
-        state: statusToQbittorrentState(f.status_str),
-        content_path: contentPath(f.name),
-        category: f.meta?.category,
-      })),
-  ])
+      .map((file) => buildQbittorrentTorrentInfo(file))
+      .filter((entry) => entry !== null)
+  )
 }) satisfies LoaderFunction
 
 export const action = loader
-
-function contentPath(name: string) {
-  if (existsSync(`/downloads/complete/${name}`)) {
-    return `/downloads/complete/${name}`
-  }
-
-  if (existsSync(`/tmp/shared/${name}`)) {
-    return `/tmp/shared/${name}`
-  }
-
-  return undefined
-}
-
-function statusToQbittorrentState(
-  status: Awaited<ReturnType<typeof amuleGetDownloads>>[0]["status_str"]
-) {
-  switch (status) {
-    case "downloading":
-      return "downloading"
-    case "downloaded":
-      return "pausedUP"
-    case "stalled":
-      return "stalledDL"
-    case "error":
-      return "error"
-    case "completing":
-      return "moving"
-    case "stopped":
-      return "pausedDL"
-  }
-}
