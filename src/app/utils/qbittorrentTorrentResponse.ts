@@ -133,3 +133,14 @@ export function buildQbittorrentTorrentFile(file: DownloadClientFile) {
     availability: completed ? 1 : 0,
   }
 }
+
+export const QBITTORRENT_APP_PREFERENCES = {
+  save_path: QBITTORRENT_SAVE_PATH,
+  temp_path_enabled: true,
+  temp_path: "/downloads/incomplete",
+  create_subfolder_enabled: false,
+  max_ratio_enabled: true,
+  max_ratio: COMPLETED_COMPAT_RATIO,
+  max_seeding_time_enabled: true,
+  max_seeding_time: COMPLETED_SEEDING_TIME_SECONDS,
+}

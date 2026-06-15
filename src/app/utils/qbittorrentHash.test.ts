@@ -7,6 +7,7 @@ import {
   normalizeInternalEd2kHash,
   parseQbittorrentHashQuery,
   parseQbittorrentHashSelection,
+  parseTorrentHashesFromFormData,
   selectionFromParsedHashes,
 } from "./qbittorrentHash.ts"
 
@@ -15,7 +16,10 @@ const UNKNOWN = "BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB"
 
 describe("qbittorrentHash", () => {
   it("normalizes internal hashes", () => {
-    assert.equal(normalizeInternalEd2kHash(`  ${SAMPLE.toLowerCase()}  `), SAMPLE)
+    assert.equal(
+      normalizeInternalEd2kHash(`  ${SAMPLE.toLowerCase()}  `),
+      SAMPLE
+    )
   })
 
   it("converts internal to external hash", () => {
@@ -66,18 +70,9 @@ describe("qbittorrentHash", () => {
   })
 
   it("filters info results by hash selection semantics", () => {
-    assert.equal(
-      hashSelectionMatchesFile({ kind: "absent" }, SAMPLE),
-      true
-    )
-    assert.equal(
-      hashSelectionMatchesFile({ kind: "invalid" }, SAMPLE),
-      false
-    )
-    assert.equal(
-      hashSelectionMatchesFile({ kind: "empty" }, SAMPLE),
-      false
-    )
+    assert.equal(hashSelectionMatchesFile({ kind: "absent" }, SAMPLE), true)
+    assert.equal(hashSelectionMatchesFile({ kind: "invalid" }, SAMPLE), false)
+    assert.equal(hashSelectionMatchesFile({ kind: "empty" }, SAMPLE), false)
     assert.equal(
       hashSelectionMatchesFile({ kind: "hashes", hashes: [SAMPLE] }, SAMPLE),
       true
@@ -85,6 +80,44 @@ describe("qbittorrentHash", () => {
     assert.equal(
       hashSelectionMatchesFile({ kind: "hashes", hashes: [UNKNOWN] }, SAMPLE),
       false
+    )
+  })
+
+  it("parses torrent hashes from multipart form data", () => {
+    const absent = new FormData()
+    assert.deepEqual(parseTorrentHashesFromFormData(absent), { kind: "absent" })
+
+    const empty = new FormData()
+    empty.set("hashes", "")
+    assert.deepEqual(parseTorrentHashesFromFormData(empty), { kind: "empty" })
+
+    const valid = new FormData()
+    valid.set("hashes", `${SAMPLE.toLowerCase()}00000000`)
+    const parsedValid = parseTorrentHashesFromFormData(valid)
+    assert.equal(parsedValid.kind, "hashes")
+    if (parsedValid.kind === "hashes") {
+      assert.deepEqual(parsedValid.hashes, [SAMPLE])
+    }
+
+    const all = new FormData()
+    all.set("hashes", "all")
+    assert.deepEqual(parseTorrentHashesFromFormData(all), { kind: "all" })
+
+    const malformed = new FormData()
+    malformed.set("hashes", "not-a-hash")
+    assert.deepEqual(parseTorrentHashesFromFormData(malformed), {
+      kind: "invalid",
+    })
+
+    const file = new FormData()
+    file.set(
+      "hashes",
+      new File(["ignored"], "hashes.txt", { type: "text/plain" })
+    )
+    assert.deepEqual(parseTorrentHashesFromFormData(file), { kind: "invalid" })
+    assert.equal(
+      selectionFromParsedHashes(parseTorrentHashesFromFormData(file)),
+      null
     )
   })
 })

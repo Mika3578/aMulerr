@@ -153,18 +153,19 @@ export default function Layout() {
           </fetcher.Form>
         </div>
       </header>
-      <div
+      <button
+        type="button"
+        aria-label="Close navigation menu"
         data-hidden={menuHidden}
-        className="fixed left-0 top-0 z-30 hidden h-full w-full backdrop-blur-sm data-[hidden=false]:block sm:data-[hidden=false]:hidden"
-        role="button"
-        tabIndex={0}
+        className="fixed left-0 top-0 z-30 hidden h-full w-full border-0 bg-transparent p-0 backdrop-blur-sm data-[hidden=false]:block sm:data-[hidden=false]:hidden"
         onClick={() => setMenuHidden(true)}
         onKeyDown={(event) => {
           if (event.key === "Enter" || event.key === " ") {
+            event.preventDefault()
             setMenuHidden(true)
           }
         }}
-      ></div>
+      />
       <nav
         className="fixed top-[60px] z-40 flex h-[calc(100%-60px)] w-[250px] flex-col bg-neutral-800 max-sm:transition-transform max-sm:data-[hidden=true]:-translate-x-full"
         data-hidden={menuHidden}

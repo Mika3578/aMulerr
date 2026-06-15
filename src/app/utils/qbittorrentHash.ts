@@ -94,7 +94,12 @@ export function parseTorrentHashesFromFormData(
     return { kind: "absent" }
   }
 
-  return parseQbittorrentHashSelection(formData.get("hashes")?.toString())
+  const value = formData.get("hashes")
+  if (typeof value !== "string") {
+    return { kind: "invalid" }
+  }
+
+  return parseQbittorrentHashSelection(value)
 }
 
 export function selectionFromParsedHashes(

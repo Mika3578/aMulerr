@@ -3,6 +3,8 @@ import { describe, it } from "node:test"
 import {
   buildQbittorrentTorrentInfo,
   buildQbittorrentTorrentProperties,
+  COMPLETED_SEEDING_TIME_SECONDS,
+  QBITTORRENT_APP_PREFERENCES,
 } from "./qbittorrentTorrentResponse.ts"
 import {
   COMPLETE_DOWNLOAD_ROOT,
@@ -42,5 +44,14 @@ describe("qbittorrentTorrentResponse", () => {
       `${COMPLETE_DOWNLOAD_ROOT}/${file.name}`
     )
     assert.equal(resolveSafeFilePath(COMPLETE_DOWNLOAD_ROOT, "../x"), null)
+  })
+
+  it("exposes completed seeding time for LazyLibrarian compatibility", () => {
+    const info = buildQbittorrentTorrentInfo(file)
+    assert.equal(info?.seeding_time, COMPLETED_SEEDING_TIME_SECONDS)
+    assert.equal(
+      QBITTORRENT_APP_PREFERENCES.max_seeding_time,
+      COMPLETED_SEEDING_TIME_SECONDS
+    )
   })
 })
