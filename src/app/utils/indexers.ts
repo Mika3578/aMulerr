@@ -5,6 +5,15 @@ import { logger } from "./logger"
 import { readableSize } from "./math"
 import { searchAndWaitForResults } from "~/data/search"
 
+const VIDEO_EXTENSIONS = ["mp4", "mkv", "avi", "wmv", "mpeg", "mpg"]
+const PUBLICATION_EXTENSIONS = ["pdf", "epub", "mobi", "azw3", "cbz", "cbr", "zip", "rar"]
+const TORZNAB_EXTENSIONS = [...VIDEO_EXTENSIONS, ...PUBLICATION_EXTENSIONS]
+
+function hasAllowedExtension(filename: string) {
+  const lower = filename.toLowerCase()
+  return TORZNAB_EXTENSIONS.some((ext) => lower.endsWith(`.${ext}`))
+}
+
 export const fakeItem = {
   name: "FAKE",
   short_name: "FAKE",
@@ -26,7 +35,7 @@ export const emptyResponse = () => `
 export async function search(q: string) {
   const searchResults = await searchAndWaitForResults(q)
   const { allowed, skipped } = searchResults.reduce((prev, curr) => {
-    if (["mp4", "mkv", "avi", "wmv", "mpeg", "mpg"].some((ext) => curr.name.endsWith(`.${ext}`))) {
+    if (hasAllowedExtension(curr.name)) {
       prev.allowed.push(curr)
     } else {
       prev.skipped.push(curr)
@@ -56,8 +65,10 @@ export const itemsResponse = (
           <item>
             <title>${encode(item.name)}</title>
             <guid>${item.hash}-${encode(item.name)}</guid>
+            <link>${encode(item.magnetLink)}</link>
             <pubDate>${buildRFC822Date(new Date())}</pubDate>
             <enclosure url="${encode(item.magnetLink)}" length="${item.size}" type="application/x-bittorrent" />
+            <torznab:attr name="magneturl" value="${encode(item.magnetLink)}" />
             <torznab:attr name="size" value="${item.size}" />
             ${categories.map((c) => `<torznab:attr name="category" value="${c}" />`).join("")}
             <torznab:attr name="seeders" value="${item.sources}" />
