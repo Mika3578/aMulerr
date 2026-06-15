@@ -40,6 +40,15 @@ describe("qbittorrentMagnet", () => {
     assert.equal(parseSyntheticMagnetLink(magnet).hash, HASH)
   })
 
+  it("accepts the reproduced LazyLibrarian base32 BTIH", () => {
+    const magnet =
+      "magnet:?xt=urn:btih:3ZXWM66ZHIOH7FHJZXMKSJFAW4AAAAAA&dn=Hackable%20Magazine&xl=105047352&tr=http://emulerr"
+    assert.equal(
+      parseSyntheticMagnetLink(magnet).hash,
+      "DE6F667BD93A1C7F94E9CDD8A924A0B7"
+    )
+  })
+
   it("rejects non-emulerr btih values", () => {
     const magnet = `magnet:?xt=urn:btih:${"a".repeat(40)}&dn=${encodeURIComponent("Example.epub")}&xl=${SIZE}`
     assert.throws(() => parseSyntheticMagnetLink(magnet), MagnetParseError)

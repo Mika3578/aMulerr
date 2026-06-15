@@ -1,8 +1,4 @@
-import base32 from "hi-base32"
-import {
-  EXTERNAL_HASH_PADDING,
-  normalizeInternalEd2kHash,
-} from "~/utils/qbittorrentHash"
+import { compatibilityHashToInternalEd2kHash } from "~/utils/qbittorrentHash"
 
 export class MagnetParseError extends Error {
   constructor(message: string) {
@@ -12,47 +8,17 @@ export class MagnetParseError extends Error {
 }
 
 function decodeBtihToInternalHash(btih: string): string {
+  const internal = compatibilityHashToInternalEd2kHash(btih)
+  if (internal) {
+    return internal
+  }
+
   const value = btih.trim()
-
   if (/^[0-9A-Fa-f]{40}$/.test(value)) {
-    const upper = value.toUpperCase()
-    if (!upper.endsWith(EXTERNAL_HASH_PADDING)) {
-      throw new MagnetParseError("Unsupported BitTorrent info hash")
-    }
-
-    const internal = normalizeInternalEd2kHash(upper.slice(0, 32))
-    if (!internal) {
-      throw new MagnetParseError("Invalid compatibility info hash")
-    }
-
-    return internal
+    throw new MagnetParseError("Unsupported BitTorrent info hash")
   }
 
-  try {
-    const bytes = Buffer.from(base32.decode.asBytes(value.toUpperCase()))
-    if (bytes.length !== 20) {
-      throw new MagnetParseError("Invalid base32 info hash length")
-    }
-
-    if (!bytes.subarray(16).every((byte) => byte === 0)) {
-      throw new MagnetParseError("Unsupported BitTorrent info hash")
-    }
-
-    const internal = normalizeInternalEd2kHash(
-      bytes.subarray(0, 16).toString("hex")
-    )
-    if (!internal) {
-      throw new MagnetParseError("Invalid eD2K info hash")
-    }
-
-    return internal
-  } catch (error) {
-    if (error instanceof MagnetParseError) {
-      throw error
-    }
-
-    throw new MagnetParseError("Invalid magnet info hash")
-  }
+  throw new MagnetParseError("Invalid magnet info hash")
 }
 
 export function parseSyntheticMagnetLink(magnetLink: string): {
