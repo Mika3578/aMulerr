@@ -1,5 +1,5 @@
 <?php
-    switch ($HTTP_GET_VARS["get"]) {
+    switch ($_GET["get"]) {
         case "categories":
             $categories = amule_get_categories();
             echo "{";
@@ -131,34 +131,34 @@
             break;
     }
 
-    switch ($HTTP_GET_VARS["do"]) {
+    switch ($_GET["do"]) {
         case "search":
-            $q = $HTTP_GET_VARS["q"];
-            $ext = $HTTP_GET_VARS["ext"];
-            $searchType = $HTTP_GET_VARS["searchType"];
-            $minSize = $HTTP_GET_VARS["minSize"];
+            $q = $_GET["q"];
+            $ext = $_GET["ext"];
+            $searchType = $_GET["searchType"];
+            $minSize = $_GET["minSize"];
             amule_do_search_start_cmd($q, $ext, "", $searchType, "", $minSize, 0);
             echo '{}';
             break;
         case "download":
             $cat = amule_get_categories();
-            $link = $HTTP_GET_VARS["link"];
-            $category = $HTTP_GET_VARS["category"];
+            $link = $_GET["link"];
+            $category = $_GET["category"];
             amule_do_ed2k_download_cmd($link, $category);
             echo '{}';
             break;
         case "cancel":
-            $hash = $HTTP_GET_VARS["hash"];
+            $hash = $_GET["hash"];
             amule_do_download_cmd($hash, 'cancel');
             echo '{}';
             break;
         case "resume":
-            $hash = $HTTP_GET_VARS["hash"];
+            $hash = $_GET["hash"];
             amule_do_download_cmd($hash, 'resume');
             echo '{}';
             break;
         case "pause":
-            $hash = $HTTP_GET_VARS["hash"];
+            $hash = $_GET["hash"];
             amule_do_download_cmd($hash, 'pause');
             echo '{}';
             break;

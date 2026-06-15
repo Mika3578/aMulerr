@@ -7,6 +7,7 @@ import {
   SHARED_DOWNLOAD_ROOT,
 } from "~/utils/qbittorrentPathSafety"
 import { internalToExternalQbittorrentHash } from "~/utils/qbittorrentHash"
+import { logger } from "~/utils/logger"
 import { torrentTimestampsFromMetadata } from "~/utils/qbittorrentTimestamps"
 import type { DownloadClientFile } from "~/data/downloadClient"
 
@@ -55,6 +56,10 @@ export function resolveContentPath(fileName: string): string | undefined {
 export function buildQbittorrentTorrentInfo(file: DownloadClientFile) {
   const externalHash = internalToExternalQbittorrentHash(file.hash)
   if (!externalHash) {
+    logger.warn("Skipping torrent info entry with non-exportable hash", {
+      hash: file.hash,
+      name: file.name,
+    })
     return null
   }
 

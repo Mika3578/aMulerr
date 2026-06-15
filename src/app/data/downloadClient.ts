@@ -323,6 +323,8 @@ export async function removeTorrents(
           // entry is removed here.
           await amuleDoDelete(hash)
         }
+        // Completed files stay on disk and remain in aMule's shared list; only
+        // the qBittorrent-compatible API entry is hidden.
         markRemovedFromApi(hash)
         return
       }
