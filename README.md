@@ -4,6 +4,11 @@ Seamless integration for eD2k/KAD (eMule) networks and Radarr/Sonarr, enjoy.
 
 [![Docker](https://img.shields.io/badge/docker-%230db7ed.svg?style=for-the-badge&logo=docker&logoColor=white)](https://hub.docker.com/r/isc30/emulerr)
 
+## v2 Rewrite (to be released on 07/2026)
+After amule has released v3 with many improvements including external connections, most of the codebase can be simplified.
+This is a work in progress that will soon be released in 07/2026.
+Please wait before submitting PRs.
+
 ## Running the container
 
 Add the following service to your docker-compose:
