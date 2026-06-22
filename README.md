@@ -5,6 +5,8 @@ Integrate your *rr apps with aMule (eD2k/KAD). Compatible with:
 - Radarr
 - Sonarr
 
+https://hub.docker.com/r/isc30/amulerr
+
 > aMulerr is the successor of eMulerr, which no longer exists.
 
 ## Example `docker-compose.yaml`
