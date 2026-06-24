@@ -10,46 +10,58 @@ export const Route = createFileRoute('/api/v2/torrents/info')({
         const url = new URL(request.url)
         const categoryTitle = url.searchParams.get("category")
 
-        const { category, shared, downloads } = await useAmule(async (amule) => {
+        const { categories, shared, downloads } = await useAmule(async (amule) => {
           const categories = await amule.getCategories()
-          const category = categories.find(c => c.title === categoryTitle)
-          if (!category?.id) {
-            throw new Error(`Category "${categoryTitle}" not found`)
-          }
-
           const downloads = await amule.getDownloadQueue()
           const shared = await amule.getSharedFiles()
           return {
-            downloads: downloads.filter(d => d.category === category.id),
-            shared: shared.filter(s => !downloads.some(d => d.fileHash === s.fileHash) && s.path?.endsWith(`/${categoryTitle}`)),
-            category
+            categories,
+            downloads: downloads.map(d => ({ ...d, category_obj: categories.find(c => c.id === d.category) })),
+            shared: shared
+              .filter(s => !downloads.some(d => d.fileHash === s.fileHash))
+              .map(d => ({ ...d, category_obj: categories.find(c => c.path === d.path) })),
           }
         })
 
+        const filterCategory = categories.find(c => c.title === categoryTitle)
+        if (categoryTitle && !filterCategory) {
+          throw new Error(`Category ${categoryTitle} not found`)
+        }
+
+        const filteredDownloads = categoryTitle
+          ? downloads.filter(d => d.category_obj === filterCategory)
+          : downloads
+
+        const filteredShared = categoryTitle
+          ? shared.filter(s => s.category_obj === filterCategory)
+          : shared
+
         // qBittorrent structure
         return Response.json([
-          ...downloads.map((f) => ({
+          ...filteredDownloads.map((f) => ({
             hash: f.fileHash,
             name: f.fileName,
             size: f.fileSize,
+            tracker: 'aMulerr',
             size_done: f.fileSizeDownloaded,
             progress: Math.min(99.99, parseFloat(f.progress ?? '0')) / 100,
             dlspeed: f.speed,
             eta: f.speed && f.speed > 0 ? (f.fileSize - (f.fileSizeDownloaded ?? 0)) / f.speed : 8640000,
             state: statusToQbittorrentState(f),
-            category: categoryTitle,
-            content_path: `${category.path}/${f.fileName}`,
+            content_path: `${f.category_obj?.path}/${f.fileName}`,
+            category: f.category_obj?.title,
           })),
-          ...shared.map((f) => ({
+          ...filteredShared.map((f) => ({
             hash: f.fileHash,
             name: f.fileName,
             size: f.fileSize,
+            tracker: 'aMulerr',
             size_done: f.fileSize,
             progress: 1,
             dlspeed: 0,
             state: "pausedUP" as const,
-            category: categoryTitle,
             content_path: `${f.path}/${f.fileName}`,
+            category: f.category_obj?.title,
           })),
         ])
       }
