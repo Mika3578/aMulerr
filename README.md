@@ -1,7 +1,6 @@
 # aMulerr
 
 [![Latest Release](https://img.shields.io/github/v/release/isc30/amulerr)](https://github.com/isc30/amulerr/releases/latest)
-[![Docker Image Version](https://img.shields.io/docker/v/isc30/amulerr/latest)](https://hub.docker.com/r/isc30/amulerr/tags)
 
 Integrate your *rr apps with aMule (eD2k/KAD). Compatible with:
 
