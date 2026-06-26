@@ -50,6 +50,8 @@ declare module '#/amule-ec-node/AmuleClient.mjs' {
         sourceCountXfer?: number
         sourceCountA4AF?: number
         lastSeenComplete?: number
+        lastReceived?: number
+        downloadActiveTime?: number
         category?: number
         progress?: string
         raw?: AmuleTagTree
