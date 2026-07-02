@@ -26,13 +26,17 @@ export const itemsResponse = (
     <channel>
       <torznab:response offset="0" total="${searchResults.length}"/>
       ${searchResults.map(
-  (item) => `
+  (item) => {
+    const magnet = toMagnetLink(item.fileHash, item.fileName, item.fileSize)
+    return `
           <item>
             <title>${encode(item.fileName)}</title>
             <guid>${item.fileHash}-${encode(item.fileName)}</guid>
+            <link>${encode(magnet)}</link>
             <pubDate>${buildRFC822Date(new Date())}</pubDate>
-            <enclosure url="${encode(toMagnetLink(item.fileHash, item.fileName, item.fileSize))}" length="${item.fileSize}" type="application/x-bittorrent" />
+            <enclosure url="${encode(magnet)}" length="${item.fileSize}" type="application/x-bittorrent" />
             <torznab:attr name="size" value="${item.fileSize}" />
+            <torznab:attr name="magneturl" value="${encode(magnet)}" />
             ${categories.map((c) => `<torznab:attr name="category" value="${c}" />`).join("")}
             <torznab:attr name="seeders" value="${item.sourceCount}" />
             <torznab:attr name="downloadvolumefactor" value="0" />
@@ -41,7 +45,8 @@ export const itemsResponse = (
             <torznab:attr name="minimumseedtime" value="0" />
             <torznab:attr name="tag" value="freeleech" />
           </item>`
-)}
+  }
+).join("")}
     </channel>
   </rss>
   `

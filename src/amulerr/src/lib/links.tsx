@@ -1,32 +1,64 @@
-import base32 from "hi-base32"
-
 export function toMagnetLink(hash: string, name: string, size: number) {
-  const hashBuffer = Buffer.from(hash, "hex")
-  const base32Buffer = Buffer.alloc(20, "\0")
-  hashBuffer.copy(base32Buffer)
-  const base32Hash = base32.encode(base32Buffer).toUpperCase()
+  // Hex btih (not base32): some clients mishandle a 32-char base32 btih.
+  const btih = toQbittorrentHash(hash)
 
-  return `magnet:?xt=urn:btih:${base32Hash}&dn=${encodeURIComponent(name)}&xl=${size}&tr=http://amulerr`
+  return `magnet:?xt=urn:btih:${btih}&dn=${encodeURIComponent(name)}&xl=${size}&tr=http://amulerr`
 }
 
 export function fromMagnetLink(magnetLink: string) {
   const extractMagnetLinkInfo =
-    /magnet:\?xt=urn:btih:(?<hash>.*)&dn=(?<name>.*)&xl=(?<size>[^&]+)&tr=http:\/\/amulerr/
+    /magnet:\?xt=urn:btih:(?<hash>[^&]+)&dn=(?<name>[^&]+)&xl=(?<size>[^&]+)&tr=http:\/\/amulerr/
   const {
-    hash: base32Hash,
+    hash: btih,
     name,
     size,
   } = extractMagnetLinkInfo.exec(magnetLink)?.groups ?? {}
 
-  if (!base32Hash || !name || !size) {
+  if (!btih || !name || !size) {
     throw new Error("Invalid magnet link")
   }
 
-  const hash = Buffer.from(base32.decode.asBytes(base32Hash))
-    .toString("hex")
-    .substring(0, 32)
-    .toUpperCase()
-  return { hash, name: decodeURIComponent(name), size: parseInt(size) }
+  if (!isAmulerrBtih(btih)) {
+    throw new Error("Invalid magnet link")
+  }
+
+  const hash = fromQbittorrentHash(btih)
+  if (!/^[0-9A-F]{32}$/.test(hash)) {
+    throw new Error("Invalid magnet link")
+  }
+
+  if (!/^\d+$/.test(size)) {
+    throw new Error("Invalid magnet link")
+  }
+
+  const parsedSize = Number(size)
+  if (!Number.isSafeInteger(parsedSize)) {
+    throw new Error("Invalid magnet link")
+  }
+
+  let decodedName: string
+  try {
+    decodedName = decodeURIComponent(name)
+  } catch {
+    throw new Error("Invalid magnet link")
+  }
+
+  return { hash, name: decodedName, size: parsedSize }
+}
+
+// qBittorrent-facing hash: ed2k hash (32 hex) padded to a 40-char hex btih.
+// Exposed in /torrents/info; converted back to the ed2k hash for aMule.
+export function toQbittorrentHash(ed2kHash: string) {
+  return ed2kHash.trim().slice(0, 32).toLowerCase().padEnd(40, "0")
+}
+
+export function fromQbittorrentHash(qbittorrentHash: string) {
+  return qbittorrentHash.trim().slice(0, 32).toUpperCase()
+}
+
+export function isAmulerrBtih(btih: string) {
+  const normalized = btih.trim().toLowerCase()
+  return /^[0-9a-f]{40}$/.test(normalized) && normalized.endsWith("00000000")
 }
 
 export function toEd2kLink(hash: string, name: string, size: number) {
