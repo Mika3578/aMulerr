@@ -1,4 +1,5 @@
 import { useAmule } from '#/amule'
+import { parseTorrentHash } from '#/lib/torrents'
 import { createFileRoute } from '@tanstack/react-router'
 
 // https://github.com/qbittorrent/qBittorrent/wiki/WebUI-API-(qBittorrent-4.1)#get-torrent-contents
@@ -7,8 +8,13 @@ export const Route = createFileRoute('/api/v2/torrents/files')({
     handlers: {
       GET: async ({ request }) => {
         const url = new URL(request.url)
-        const hash = url.searchParams.get('hash')
+        const rawHash = url.searchParams.get('hash')
 
+        if (!rawHash) {
+          return Response.json([], { status: 404 })
+        }
+
+        const hash = parseTorrentHash(rawHash)
         if (!hash) {
           return Response.json([], { status: 404 })
         }

@@ -1,6 +1,7 @@
 
 import { useAmule } from '#/amule'
 import type { DownloadItem } from '#/amule-ec-node/AmuleClient.mjs'
+import { toQbittorrentHash } from '#/lib/links'
 import { createFileRoute } from '@tanstack/react-router'
 
 export const Route = createFileRoute('/api/v2/torrents/info')({
@@ -17,9 +18,11 @@ export const Route = createFileRoute('/api/v2/torrents/info')({
 
           return {
             categories,
-            downloads: downloads.map(d => ({ ...d, category_obj: categories.find(c => c.id === d.category) })),
+            downloads: downloads
+              .filter(d => !!d.fileHash)
+              .map(d => ({ ...d, category_obj: categories.find(c => c.id === d.category) })),
             shared: shared
-              .filter(s => !downloads.some(d => d.fileHash === s.fileHash))
+              .filter(s => s.fileHash && !downloads.some(d => d.fileHash === s.fileHash))
               .map(d => ({ ...d, category_obj: categories.find(c => c.path === d.path) })),
           }
         })
@@ -39,42 +42,51 @@ export const Route = createFileRoute('/api/v2/torrents/info')({
 
         // qBittorrent structure
         return Response.json([
-          ...filteredDownloads.map((f) => ({
-            hash: f.fileHash,
-            name: f.fileName,
-            size: f.fileSize,
+          ...filteredDownloads.map((f) => {
+            const savePath = f.category_obj?.path ?? ""
+            const fileName = f.fileName ?? ""
+            const fileSize = f.fileSize ?? 0
+            const fileSizeDownloaded = f.fileSizeDownloaded ?? 0
+            const speed = f.speed ?? 0
+            return {
+            hash: toQbittorrentHash(f.fileHash),
+            name: fileName,
+            size: fileSize,
             tracker: 'http://amulerr',
-            downloaded: f.fileSizeDownloaded,
+            downloaded: fileSizeDownloaded,
             progress: Math.min(99.99, parseFloat(f.progress ?? '0')) / 100,
-            dlspeed: f.speed,
-            eta: f.speed && f.speed > 0 ? (f.fileSize - (f.fileSizeDownloaded ?? 0)) / f.speed : 8640000,
+            dlspeed: speed,
+            eta: speed > 0 ? (fileSize - fileSizeDownloaded) / speed : 8640000,
             state: statusToQbittorrentState(f),
-            content_path: `${f.category_obj?.path}/${f.fileName}`,
-            save_path: f.category_obj?.path,
-            category: f.category_obj?.title,
-            amount_left: f.fileSize - (f.fileSizeDownloaded ?? 0),
-            num_complete: f.sourceCount,
-            num_incomplete: f.sourceCountNotCurrent,
-            num_leechs: f.sourceCountXfer,
-            num_seeds: f.sourceCountA4AF,
-            seen_complete: f.lastSeenComplete,
-            last_activity: f.lastReceived,
-            time_active: f.downloadActiveTime,
+            content_path: savePath ? `${savePath}/${fileName}` : fileName,
+            save_path: savePath,
+            category: f.category_obj?.title ?? "",
+            amount_left: fileSize - fileSizeDownloaded,
+            num_complete: f.sourceCount ?? 0,
+            num_incomplete: f.sourceCountNotCurrent ?? 0,
+            num_leechs: f.sourceCountXfer ?? 0,
+            num_seeds: f.sourceCountA4AF ?? 0,
+            seen_complete: f.lastSeenComplete ?? 0,
+            last_activity: f.lastReceived ?? 0,
+            time_active: f.downloadActiveTime ?? 0,
             added_on: Math.floor(Date.now() / 1000) - (f.downloadActiveTime ?? 0)
-          })),
-          ...filteredShared.map((f) => ({
-            hash: f.fileHash,
-            name: f.fileName,
-            size: f.fileSize,
+          }}),
+          ...filteredShared.map((f) => {
+            const savePath = f.path ?? ""
+            const fileName = f.fileName ?? ""
+            return {
+            hash: toQbittorrentHash(f.fileHash),
+            name: fileName,
+            size: f.fileSize ?? 0,
             tracker: 'http://amulerr',
-            downloaded: f.fileSize,
+            downloaded: f.fileSize ?? 0,
             progress: 1,
             dlspeed: 0,
             state: "pausedUP" as const,
-            content_path: `${f.path}/${f.fileName}`,
-            save_path: f.path,
-            category: f.category_obj?.title,
-          })),
+            content_path: savePath ? `${savePath}/${fileName}` : fileName,
+            save_path: savePath,
+            category: f.category_obj?.title ?? "",
+          }}),
         ])
       }
     }
