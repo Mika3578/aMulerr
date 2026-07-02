@@ -10,7 +10,11 @@ export function setReleaseGroup(name: string) {
 export function sanitizeUnicode(str: string) {
   const apostrophes = /[\u2018\u2019\u02BB\u02BC\u201B\u2032]/g
 
+  // ordinal / numero markers ("n°3", "n º3", "n№3") so issue numbers stay parseable
+  const ordinals = /[\u00B0\u00BA\u2116]/g
+
   return str
+    .replace(ordinals, " ")
     .normalize("NFKD")
     .replace(apostrophes, " ")
     .replace(/[\u0100-\uFFFF]/g, "")
